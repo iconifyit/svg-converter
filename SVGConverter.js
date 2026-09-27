@@ -1,18 +1,34 @@
+const fs        = require("fs"),
+      DOMParser = require("xmldom").DOMParser;
+
+
 /**
  * Utility class to convert all SVG shape elements to paths.
  * @param document
  * @constructor
  */
-class Converter {
+class SVGConverter {
 
     /**
      * Class constructor.
-     * @param document
+     * @param {string} filepath
+     * @constructor
      */
-    constructor(document) {
-        this.NS  = "http://www.w3.org/2000/svg";
-        this.doc = document;
-        this.svg = this.doc.getElementsByTagName("svg")[0];
+    constructor(filepath) {
+        try {
+
+            this.NS  = "http://www.w3.org/2000/svg"
+
+            this.doc = new DOMParser().parseFromString(
+                fs.readFileSync(filepath, "utf8"),
+                "text/xml"
+            );
+
+            this.svg = this.doc.getElementsByTagName("svg")[0]
+        }
+        catch(e) {
+            throw new Error("SVGConverter " + e);
+        }
     }
 
     /**
@@ -28,120 +44,23 @@ class Converter {
      * @returns {*}
      */
     convertAll() {
-        this.convertLines();
         this.convertCircles();
+        this.convertEllipses();
+        this.convertLines();
         this.convertPolygons();
         this.convertRects();
-        this.convertEllipses();
         return this.getDoc();
-    }
-
-    /**
-     * Convert and replace Line elements with path elements.
-     */
-    convertLines() {
-
-        const items = this.getElements('line');
-
-        for (let i = 0; i < (items || []).length; i++) {
-
-            let node,
-                path,
-                points,
-                x1,
-                y1,
-                x2,
-                y2;
-
-            node = items.item(i);
-
-            x1 = +node.getAttribute('x1');
-            y1 = +node.getAttribute('y1');
-            x2 = +node.getAttribute('x2');
-            y2 = +node.getAttribute('y2');
-
-            path   = this.addPath();
-            points = this.toPoints([x1, y1, x2, y2], 3);
-
-            path.setAttribute(
-                'd', 'M' + points.join(' ')
-            );
-
-            path.setAttribute(
-                'class',
-                node.getAttribute('class')
-            );
-
-            node.parentNode.insertBefore(path, node);
-        }
-
-        while ((items || []).length > 0) {
-            items.item(0).parentNode.removeChild(items.item(0));
-        }
-    }
-
-    /**
-     * Convert and replace Rect elements with path elements.
-     */
-    convertRects() {
-
-        const items = this.getElements('rect');
-
-        for (let n = 0; n < (items || []).length; n++) {
-
-            let x,
-                y,
-                w,
-                h,
-                proxy = [],
-                path,
-                node;
-
-            node = items.item(n);
-
-            x = +node.getAttribute("x");
-            y = +node.getAttribute("y");
-            w = +node.getAttribute("width");
-            h = +node.getAttribute("height");
-
-            proxy = this.getProxy(x, y, w, h, this.getAngle(node));
-
-            path = this.addPath();
-
-            path.setAttribute(
-                "d",
-                "M"  + proxy[0].x + " " + proxy[0].y +
-                " L" + proxy[1].x + " " + proxy[1].y +
-                " L" + proxy[2].x + " " + proxy[2].y +
-                " L" + proxy[3].x + " " + proxy[3].y +
-                " Z"
-            );
-
-            path.setAttribute('class', node.getAttribute('class'));
-
-            node.parentNode.insertBefore(path, node);
-        }
-
-        while ((items || []).length > 0) {
-            items.item(0).parentNode.removeChild(items.item(0));
-        }
     }
 
     /**
      * Convert and replace Circle elements with path elements.
      */
     convertCircles() {
-
-        const items = this.getElements('circle');
-
-        for (let n = 0; n < (items || []).length; n++) {
-
-            let node = items.item(n);
-
-            const cx = +node.getAttribute("cx"),
-                cy   = +node.getAttribute("cy"),
-                r    = +node.getAttribute("r"),
-                path = this.addPath();
+        this.processNodes('circle', (node) => {
+            const cx   = +node.getAttribute("cx"),
+                  cy   = +node.getAttribute("cy"),
+                  r    = +node.getAttribute("r"),
+                  path = this.addPath();
 
             path.setAttribute(
                 "d",
@@ -158,63 +77,22 @@ class Converter {
                 cy.toFixed(3)       + " Z"
             );
 
-            path.setAttribute('class', node.getAttribute('class'));
-
-            node.parentNode.insertBefore(path, node);
-        }
-
-        while ((items || []).length > 0) {
-            items.item(0).parentNode.removeChild(items.item(0));
-        }
-    }
-
-    /**
-     * Convert and replace Polygon elements with path elements.
-     */
-    convertPolygons() {
-
-        const items = this.getElements('polygon');
-
-        for (let n = 0; n < (items || []).length; n++) {
-
-            let node   = items.item(n);
-
-            let points = node.getAttribute("points").split(/\s|,/),
-                data   = "M" + points[0] + " " + points[1];
-
-            for (let i = 0, size = points.length - 2; i < size; i += 2) {
-                data += " L" + points[i] + " " + points[i + 1];
-            }
-
-            const path = this.addPath();
-            path.setAttribute("d", data + " Z");
-            path.setAttribute('class', node.getAttribute('class'));
-
-            node.parentNode.insertBefore(path, node);
-        }
-
-        while ((items || []).length > 0) {
-            items.item(0).parentNode.removeChild(items.item(0));
-        }
+            return path
+        })
+        return this.getDoc();
     }
 
     /**
      * Convert and replace Ellipse elements with path elements.
      */
     convertEllipses() {
-
-        const items = this.getElements('ellipse');
-
-        for (let n = 0; n < (items || []).length; n++) {
-
-            let node = items.item(n);
-
-            const cx   = +node.getAttribute("cx"),
-                cy   = +node.getAttribute("cy"),
-                rx   = +node.getAttribute("rx"),
-                ry   = +node.getAttribute("ry"),
-                deg  = this.getAngle(node),
-                path = this.addPath();
+        this.processNodes('ellipse', (node) => {
+            const cx    = +node.getAttribute("cx"),
+                cy    = +node.getAttribute("cy"),
+                rx    = +node.getAttribute("rx"),
+                ry    = +node.getAttribute("ry"),
+                deg   = this.getAngle(node),
+                path  = this.addPath();
 
             const proxy = this.getEllipseProxy(cx, cy, rx, ry, deg);
 
@@ -228,7 +106,126 @@ class Converter {
                 proxy[0].y + " Z"
             );
 
+            return path
+        })
+        return this.getDoc();
+    }
+
+    /**
+     * Convert and replace Line elements with path elements.
+     */
+    convertLines() {
+        this.processNodes('line', (node) => {
+            let path,
+                points,
+                x1,
+                y1,
+                x2,
+                y2;
+
+            x1 = +node.getAttribute('x1');
+            y1 = +node.getAttribute('y1');
+            x2 = +node.getAttribute('x2');
+            y2 = +node.getAttribute('y2');
+
+            path   = this.addPath();
+            points = this.toPoints([x1, y1, x2, y2], 3);
+
+            path.setAttribute(
+                'd', 'M' + points.join(' ')
+            );
+
+            return path
+        })
+        return this.getDoc();
+    }
+
+    /**
+     * Convert and replace Polygon elements with path elements.
+     */
+    convertPolygons() {
+        this.processNodes('polygon', (node) => {
+            let points = node.getAttribute("points").split(/\s|,/),
+                data   = "M" + points[0] + " " + points[1];
+
+            for (let i = 0, size = points.length - 2; i < size; i += 2) {
+                data += " L" + points[i] + " " + points[i + 1];
+            }
+
+            const path = this.addPath();
+            path.setAttribute("d", data + " Z");
+
+            return path
+        })
+        return this.getDoc();
+    }
+
+    /**
+     * Convert and replace Rect elements with path elements.
+     */
+    convertRects() {
+        this.processNodes('rect', (node) => {
+            let x,
+                y,
+                w,
+                h,
+                proxy,
+                path
+
+            x = +node.getAttribute("x");
+            y = +node.getAttribute("y");
+            w = +node.getAttribute("width");
+            h = +node.getAttribute("height");
+
+            proxy = this.getProxy(x, y, w, h, this.getAngle(node));
+
+            path  = this.addPath();
+
+            path.setAttribute(
+                "d",
+                "M"  + proxy[0].x + " " + proxy[0].y +
+                " L" + proxy[1].x + " " + proxy[1].y +
+                " L" + proxy[2].x + " " + proxy[2].y +
+                " L" + proxy[3].x + " " + proxy[3].y +
+                " Z"
+            );
+
+            return path
+        })
+        return this.getDoc();
+    }
+
+    /**
+     * Loop through node list and perform element-specific conversions.
+     * @param {string}      nodeName
+     * @param {function}    callback
+     */
+    processNodes(nodeName, callback) {
+
+        const items = this.getElements(nodeName);
+
+        for (let n = 0; n < (items || []).length; n++) {
+
+            let node = items.item(n);
+
+            let path = callback.call(null, node)
+
             path.setAttribute('class', node.getAttribute('class'));
+
+            path.setAttribute(
+                'data-prevId',
+                node.getAttribute('id') ||
+                node.getAttribute('data-name') ||
+                'from-' + node.nodeName
+            )
+
+            if (node.getAttribute('transform') && ! nodeName === 'rect') {
+                console.log(`${nodeName} transform`, node.getAttribute('transform'))
+                path.setAttribute(
+                    'transform',
+                    node.getAttribute('transform')
+                )
+            }
 
             node.parentNode.insertBefore(path, node);
         }
@@ -274,7 +271,7 @@ class Converter {
     getAngle(node) {
 
         let tran,
-            deg = 0,
+            deg   = 0,
             param = [];
 
         tran = node.getAttribute("transform");
@@ -376,4 +373,4 @@ class Converter {
  * The export.
  * @type {Converter}
  */
-exports.Converter = Converter;
+exports.SVGConverter = SVGConverter;

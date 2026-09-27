@@ -1,61 +1,52 @@
-const fs            = require("fs"),
-      path          = require("path"),
-      DOMParser     = require("xmldom").DOMParser,
-      XMLSerializer = require("xmldom").XMLSerializer,
-      Converter     = require('./Converter').Converter,
-      SvgToJson     = require('./SvgToJson').SvgToJson,
-      _             = require('lodash');
+const fs                   = require("fs"),
+      path                 = require("path"),
+      DOMParser            = require("xmldom").DOMParser,
+      XMLSerializer        = require("xmldom").XMLSerializer,
+      SVGConverter         = require('./SVGConverter').SVGConverter,
+      SvgToJson            = require('./SvgToJson').SvgToJson,
+      _                    = require('lodash'),
+      slash                = require('./functions.js').slash
+
 
 try {
-    var doc,
-        svgString,
-        svgDocument,
+    let svg,
+        converter,
         parser,
         writer,
         data = [];
 
-    var indir  = "./input",
-        outdir = "./output";
+    const indir  = "./input",
+          outdir = "./output";
 
     parser = new DOMParser();
     writer = new XMLSerializer();
 
-    let icons = fs
-        .readdirSync(indir)
-        .filter(f => f.endsWith('.svg'));
-
-    function slashit(path) {
-        if (path.charAt(path.length-1) ===  "/") return path;
-        return path + "/";
-    }
+    const icons = fs.readdirSync(indir).filter(f => f.endsWith('.svg'));
 
     _.each(icons, async (source, iter) => {
 
-        source = slashit(indir) + source;
+        source = slash(indir) + source;
 
-        svgDocument = parser.parseFromString(
-            fs.readFileSync(source, "utf8"),
-            "text/xml"
-        );
-
-        doc = new Converter(svgDocument).convertAll();
+        converter = new SVGConverter(source);
+        converter.convertAll();
+        svg = converter.getDoc();
 
         fs.writeFileSync(
-            slashit(outdir) + path.basename(source),
-            writer.serializeToString(doc),
+            slash(outdir) + path.basename(source),
+            writer.serializeToString(svg),
             "utf8"
         );
 
-        data = new SvgToJson(doc).getData();
-
-        fs.writeFileSync(
-            slashit(outdir) + 'icons.json',
-            JSON.stringify(data),
-            "utf8"
-        );
+        data.push(new SvgToJson(svg).getData());
     });
 
-    console.log('Done!');
+    fs.writeFileSync(
+        slash(outdir) + '000-emojis-' + (new Date()).getTime() + '.json',
+        JSON.stringify({icons : data}),
+        "utf8"
+    );
+
+    console.log('SVG Conversions complete.');
 }
 catch(e) {
     console.error(e);

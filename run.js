@@ -2,7 +2,7 @@ var fs            = require("fs"),
     path          = require("path"),
     DOMParser     = require("xmldom").DOMParser,
     XMLSerializer = require("xmldom").XMLSerializer,
-    Converter     = require('./Converter').Converter,
+    Converter     = require('./SVGConverter').Converter,
     SvgToJson     = require('./SvgToJson').SvgToJson,
     _             = require('lodash');
 
